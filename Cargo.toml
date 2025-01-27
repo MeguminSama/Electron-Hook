@@ -1,0 +1,46 @@
+[workspace]
+members = ["crates/*"]
+
+[package]
+name = "electron-hook"
+description = "In-memory Electron mod loader."
+authors = ["Rie Takahashi <megumin@megu.dev>"]
+version = "0.2.0-beta.1"
+license = "LGPL-3.0"
+homepage = "https://github.com/meguminsama/electron-hook"
+repository = "https://github.com/meguminsama/electron-hook"
+categories = ["web-programming", "development-tools"]
+keywords = ["modding", "electron", "discord", "hook", "detour"]
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["uuid", "asar"]
+asar = ["dep:asar"]
+uuid = ["dep:uuid"]
+self-executable = []
+
+[dependencies]
+asar = { version = "0.3.0", default-features = false, features = ["write"], optional = true }
+dirs = "5.0.1"
+libc = "0.2.167"
+uuid = { version = "1.12.1", features = ["v4"], optional = true }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.9", features = [
+    "winbase",
+    "handleapi",
+    "minwindef",
+    "consoleapi",
+    "winnt",
+    "memoryapi",
+    "namedpipeapi",
+] }
+detours-sys = { version = "0.1.2" }
+widestring = "1.1.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.167"
+retour = { version = "0.3.1", features = ["static-detour"] }
