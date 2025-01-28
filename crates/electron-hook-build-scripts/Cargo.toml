@@ -1,7 +1,7 @@
 [package]
 name = "electron-hook-build-scripts"
 description = "Build scripts for electron-hook"
-version = "0.2.0-beta.1"
+version = "0.2.0-beta.2"
 license = "LGPL-3.0"
 homepage = "https://github.com/meguminsama/electron-hook"
 repository = "https://github.com/meguminsama/electron-hook"

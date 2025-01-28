@@ -1,4 +1,4 @@
-/// Apply cargo build scripts required for electron-hook's shared-executable feature.
+/// Apply cargo build scripts required for electron-hook's self-executable feature.
 pub fn build() {
     // Unfortunately, it's unsafe to use rustc-cdylib-link-args transitively in child dependencies
     // So the user must add this to their build script.

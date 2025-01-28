@@ -71,11 +71,6 @@ macro_rules! make_shared_executable {
             #[link_section = ".interp"]
             #[no_mangle]
             pub static INTERP: [u8; interp!().len()] = *interp!();
-
-            #[no_mangle]
-            fn main() {
-                crate::main();
-            }
         }
     };
 }

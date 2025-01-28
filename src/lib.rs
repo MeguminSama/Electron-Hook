@@ -80,10 +80,39 @@ pub use linux::*;
 /// Launches an Electron executable with the provided asar path, arguments, and optional profile directory.
 ///
 /// It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
-#[cfg(target_os = "linux")]
-pub fn launch(
+///
+/// This is only available when the `self-executable` feature is enabled.
+/// If you want to use a separate file for the shared library, use `launch_with_shared` instead.
+#[cfg(any(doc, all(unix, feature = "self-executable")))]
+pub fn launch_with_self(
     executable: &str,
     asar_path: &str,
+    args: Vec<String>,
+    profile_directory: Option<String>,
+    detach: bool,
+) -> Result<std::process::ExitStatus, String> {
+    let shared_object = std::env::current_exe().map_err(|_| "Failed to get current executable")?;
+    launch_with_shared(
+        executable,
+        asar_path,
+        shared_object.to_str().unwrap(),
+        args,
+        profile_directory,
+        detach,
+    )
+}
+
+/// Launches an Electron executable with the provided asar path, arguments, and optional profile directory.
+///
+/// It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
+///
+/// This is only available when the `self-executable` feature is enabled.
+/// If you want to use the executable as the shared library, use `launch_with_self` instead.
+#[cfg(target_os = "linux")]
+fn launch_with_shared(
+    executable: &str,
+    asar_path: &str,
+    shared_object_path: &str,
     args: Vec<String>,
     profile_directory: Option<String>,
     detach: bool,
@@ -106,11 +135,9 @@ pub fn launch(
             .ok_or("Failed to get parent directory from executable")?
     };
 
-    let current_exe = std::env::current_exe().map_err(|_| "Failed to get current executable")?;
-
     let Ok(mut target) = std::process::Command::new(&executable)
         .current_dir(working_dir)
-        .env("LD_PRELOAD", current_exe)
+        .env("LD_PRELOAD", shared_object_path)
         .env("MODLOADER_ASAR_PATH", asar_path)
         .args(args)
         .spawn()
