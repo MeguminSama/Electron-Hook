@@ -25,9 +25,16 @@ pub fn launch(
     let shared_object = std::ffi::CString::new(shared_object_path) //.replace(".exe", ".dll"))
         .map_err(|_| "Failed to convert shared object path to CString")?;
 
+    let folder_name = working_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or("Failed to get directory name as string")?;
+
     // Set env vars needed for the child processes
     std::env::set_var("MODLOADER_ASAR_PATH", asar_path);
     std::env::set_var("MODLOADER_DLL_PATH", shared_object_path);
+    std::env::set_var("MODLOADER_FOLDER_NAME", folder_name);
+
     let _ = std::env::set_current_dir(working_dir);
 
     let working_dir = std::ffi::CString::new(working_dir.parent().unwrap().to_str().unwrap())
