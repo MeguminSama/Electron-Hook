@@ -98,6 +98,11 @@ impl Asar {
         Self::default()
     }
 
+    /// Get the path to the ASAR archive.
+    pub fn get_path(&self) -> Option<std::path::PathBuf> {
+        (!self.id.is_empty()).then(|| crate::paths::asar_cache_path(&self.id))
+    }
+
     /// Generate a random UUID for the ASAR archive to use.
     #[cfg(feature = "uuid")]
     pub fn with_uuid(mut self) -> Self {
