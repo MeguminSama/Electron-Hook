@@ -3,22 +3,17 @@ use std::{ffi::CString, str::FromStr, sync::LazyLock};
 use detours_sys::{
     DetourAttach, DetourCreateProcessWithDllW, DetourIsHelperProcess, DetourRestoreAfterWith,
     DetourTransactionAbort, DetourTransactionBegin, DetourTransactionCommit, DetourUpdateThread,
-    PVOID,
 };
-
 use widestring::U16CString;
 use winapi::{
-    shared::{
-        minwindef::{BOOL, DWORD, HINSTANCE, LPVOID},
-        ntdef::{HANDLE, LPCWSTR, LPWSTR},
-    },
+    shared::minwindef::{BOOL, DWORD, HINSTANCE, LPVOID},
     um::{
         fileapi::{CreateFileW, GetFileAttributesW},
         minwinbase::LPSECURITY_ATTRIBUTES,
         processthreadsapi::{
             CreateProcessW, GetCurrentThread, ResumeThread, LPPROCESS_INFORMATION, LPSTARTUPINFOW,
         },
-        winnt::DLL_PROCESS_ATTACH,
+        winnt::{DLL_PROCESS_ATTACH, HANDLE, LPCWSTR, LPWSTR, PVOID},
         winuser::MessageBoxA,
     },
 };
@@ -45,7 +40,7 @@ macro_rules! error_hooking_msg {
 }
 
 #[no_mangle]
-unsafe extern "stdcall" fn DllMain(
+pub unsafe extern "stdcall" fn DllMain(
     _hinst_dll: HINSTANCE,
     fwd_reason: DWORD,
     _lpv_reserved: LPVOID,
@@ -61,10 +56,10 @@ unsafe extern "stdcall" fn DllMain(
     DetourRestoreAfterWith();
 
     DetourTransactionBegin();
-    DetourUpdateThread(GetCurrentThread());
+    DetourUpdateThread(GetCurrentThread() as _);
 
     let result = DetourAttach(
-        &raw mut ORIGINAL_GET_FILE_ATTRIBUTES_W,
+        &raw mut ORIGINAL_GET_FILE_ATTRIBUTES_W as _,
         get_file_attributes_w as _,
     );
 
@@ -74,7 +69,7 @@ unsafe extern "stdcall" fn DllMain(
         return 1;
     }
 
-    let result = DetourAttach(&raw mut ORIGINAL_CREATE_FILE_W, create_file_w as _);
+    let result = DetourAttach(&raw mut ORIGINAL_CREATE_FILE_W as _, create_file_w as _);
 
     if result != 0 {
         error_hooking_msg!("Failed to hook CreateFileW. Please report this issue.");
@@ -82,7 +77,10 @@ unsafe extern "stdcall" fn DllMain(
         return 1;
     }
 
-    let result = DetourAttach(&raw mut ORIGINAL_CREATE_PROCESS_W, create_process_w as _);
+    let result = DetourAttach(
+        &raw mut ORIGINAL_CREATE_PROCESS_W as _,
+        create_process_w as _,
+    );
 
     if result != 0 {
         error_hooking_msg!("Failed to hook CreateProcessW. Please report this issue on GitHub.");

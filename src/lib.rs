@@ -3,15 +3,10 @@
 //!
 //! This library was made for improving the modding experience for Discord, but it can be used for any Electron app.
 //!
-//! This library provides functionality to make the executable self-loadable as a shared-object (Linux) or DLL (Windows).
-//! This makes it much more portable, without needing a separate .so or .dll file.
-//! To use this, enable the `self-executable` feature.
-//!
 //! # Features
 //!
 //! - `asar`: Enables the ASAR archive builder. (enabled by default)
 //! - `uuid`: Enables the use of random UUIDs for ASAR archive names. (enabled by default)
-//! - `self-executable`: Makes the executable double as a shared library.
 //!
 //! # Examples
 //!
@@ -54,100 +49,48 @@
 
 #[cfg(any(doc, feature = "asar"))]
 pub mod asar;
-pub mod macros;
 pub mod paths;
 
 // For Linux
 #[cfg(target_os = "linux")]
 mod linux;
 
-#[cfg(target_os = "linux")]
-#[allow(unused_imports)]
-pub use linux::*;
-
 // For Windows
 // TODO: Re-implement Windows support.
-// #[cfg(target_os = "windows")]
-// #[allow(unused_imports)]
-// mod windows;
-
-// #[cfg(target_os = "windows")]
-// #[allow(unused_imports)]
-// pub use windows::*;
+#[cfg(target_os = "windows")]
+mod windows;
 
 // TODO: For MacOS
 
-/// Launches an Electron executable with the provided asar path, arguments, and optional profile directory.
+/// Launches an Electron executable with the provided information.
+///
+/// On Windows, the `executable_or_directory` parameter is the path to the directory containing `Update.exe`.
+///
+/// On Linux, the `executable_or_directory` parameter is the path to the executable.
 ///
 /// It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
-///
-/// This is only available when the `self-executable` feature is enabled.
-/// If you want to use a separate file for the shared library, use `launch_with_shared` instead.
-#[cfg(any(doc, all(unix, feature = "self-executable")))]
-pub fn launch_with_self(
-    executable: &str,
-    asar_path: &str,
-    args: Vec<String>,
-    profile_directory: Option<String>,
-    detach: bool,
-) -> Result<std::process::ExitStatus, String> {
-    let shared_object = std::env::current_exe().map_err(|_| "Failed to get current executable")?;
-    launch_with_shared(
-        executable,
-        asar_path,
-        shared_object.to_str().unwrap(),
-        args,
-        profile_directory,
-        detach,
-    )
-}
-
-/// Launches an Electron executable with the provided asar path, arguments, and optional profile directory.
-///
-/// It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
-///
-/// This is only available when the `self-executable` feature is enabled.
-/// If you want to use the executable as the shared library, use `launch_with_self` instead.
-#[cfg(target_os = "linux")]
-fn launch_with_shared(
-    executable: &str,
-    asar_path: &str,
+#[allow(unused_variables)]
+pub fn launch(
+    executable_or_directory: &str,
     shared_object_path: &str,
+    asar_path: &str,
     args: Vec<String>,
-    profile_directory: Option<String>,
     detach: bool,
 ) -> Result<std::process::ExitStatus, String> {
-    let executable = std::path::PathBuf::from(executable);
-    let profile_directory = profile_directory.map(std::path::PathBuf::from);
-
-    // Detach the process from the parent. This prevents the application from dying when the parent process (e.g. terminal) is closed.
-    if detach {
-        unsafe { libc::setsid() };
+    #[cfg(target_os = "linux")]
+    {
+        linux::launch(
+            executable_or_directory,
+            shared_object_path,
+            asar_path,
+            args,
+            detach,
+        )
     }
 
-    let working_dir = if let Some(ref profile_directory) = profile_directory {
-        profile_directory
-            .parent()
-            .ok_or("Failed to get parent directory from profile directory")?
-    } else {
-        executable
-            .parent()
-            .ok_or("Failed to get parent directory from executable")?
-    };
-
-    let Ok(mut target) = std::process::Command::new(&executable)
-        .current_dir(working_dir)
-        .env("LD_PRELOAD", shared_object_path)
-        .env("MODLOADER_ASAR_PATH", asar_path)
-        .args(args)
-        .spawn()
-    else {
-        return Err("Failed to launch instance".into());
-    };
-
-    let Ok(exit_status) = target.wait() else {
-        return Err("Process exited unexpectedly".into());
-    };
-
-    Ok(exit_status)
+    #[cfg(target_os = "windows")]
+    {
+        // No need for detach on Windows, as the process already detaches itself.
+        windows::launch(executable_or_directory, shared_object_path, asar_path, args)
+    }
 }
