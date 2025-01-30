@@ -2,7 +2,7 @@
 name = "electron-hook"
 description = "In-memory Electron mod loader."
 authors = ["Rie Takahashi <megumin@megu.dev>"]
-version = "0.2.0-beta.8"
+version = "0.2.0-beta.9"
 license = "LGPL-3.0"
 homepage = "https://github.com/meguminsama/electron-hook"
 repository = "https://github.com/meguminsama/electron-hook"
