@@ -13,7 +13,7 @@ pub fn launch(
     library_path: &str,
     asar_path: &str,
     args: Vec<String>,
-) -> Result<std::process::ExitStatus, String> {
+) -> Result<Option<u32>, String> {
     let executable = std::path::Path::new(executable);
 
     let working_dir = executable
@@ -86,5 +86,6 @@ pub fn launch(
         CloseHandle(process_info.hProcess as _);
     }
 
-    Ok(std::process::ExitStatus::default())
+    // TODO: Actually return the process ID
+    Ok(0)
 }
