@@ -87,5 +87,5 @@ pub fn launch(
     }
 
     // TODO: Actually return the process ID
-    Ok(0)
+    Ok(Some(0))
 }
