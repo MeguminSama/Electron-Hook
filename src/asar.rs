@@ -4,7 +4,13 @@
 //!
 //! This module requires the `asar` feature to be enabled.
 
-const PACKAGE_JSON: &str = r#"{"main": "index.js"}"#;
+fn make_package_json(wm_class: &Option<String>) -> String {
+    if let Some(wm_class) = wm_class {
+        format!(r#"{{"main": "index.js", "name": "{wm_class}"}}"#)
+    } else {
+        r#"{"main": "index.js"}"#.to_string()
+    }
+}
 
 /// A builder for creating ASAR archives and writing them to the filesystem.
 ///
@@ -57,6 +63,13 @@ pub struct Asar {
     /// require("$ENTRYPOINT");
     /// ```
     pub template: String,
+
+    /// The WM_CLASS of the application that the mod is for.
+    ///
+    /// You can use this to make it show as a different application on your Linux taskbar.
+    ///
+    /// This (probably) has no effect on Windows.
+    pub wm_class: Option<String>,
 
     /// The entrypoint for the mod. This should be the path to the main file for your mod.
     ///
@@ -134,6 +147,14 @@ impl Asar {
         self
     }
 
+    /// Provide the WM_CLASS of the application on launch.
+    ///
+    /// See [Asar::wm_class]
+    pub fn with_wm_class(mut self, wm_class: &str) -> Self {
+        self.wm_class = Some(wm_class.to_string());
+        self
+    }
+
     /// Provide the profile directory for your mod.
     ///
     /// See [Asar::profile_dir]
@@ -163,7 +184,7 @@ impl Asar {
         asar.write_file("index.js", javascript, false)
             .map_err(|e| format!("Failed to write index.js: {e}"))?;
 
-        asar.write_file("package.json", PACKAGE_JSON, false)
+        asar.write_file("package.json", make_package_json(&self.wm_class), false)
             .map_err(|e| format!("Failed to write package.json: {e}"))?;
 
         let file = std::fs::File::create(&asar_path)
