@@ -71,26 +71,20 @@ mod windows;
 /// It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
 #[allow(unused_variables)]
 pub fn launch(
-    executable_or_directory: &str,
-    shared_object_path: &str,
+    executable: &str,
+    library_path: &str,
     asar_path: &str,
     args: Vec<String>,
     detach: bool,
-) -> Result<std::process::ExitStatus, String> {
+) -> Result<Option<u32>, String> {
     #[cfg(target_os = "linux")]
     {
-        linux::launch(
-            executable_or_directory,
-            shared_object_path,
-            asar_path,
-            args,
-            detach,
-        )
+        linux::launch(executable, library_path, asar_path, args, detach)
     }
 
     #[cfg(target_os = "windows")]
     {
         // No need for detach on Windows, as the process already detaches itself.
-        windows::launch(executable_or_directory, shared_object_path, asar_path, args)
+        windows::launch(executable, library_path, asar_path, args)
     }
 }

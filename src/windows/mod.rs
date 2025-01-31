@@ -9,20 +9,18 @@ use winapi::um::{
 };
 
 pub fn launch(
-    directory: &str,
-    shared_object_path: &str,
+    executable: &str,
+    library_path: &str,
     asar_path: &str,
     args: Vec<String>,
 ) -> Result<std::process::ExitStatus, String> {
-    let directory = std::path::Path::new(directory);
-
-    let executable = get_latest_executable(directory)?;
+    let executable = std::path::Path::new(executable);
 
     let working_dir = executable
         .parent()
         .ok_or("Failed to get executable directory".to_string())?;
 
-    let shared_object = std::ffi::CString::new(shared_object_path) //.replace(".exe", ".dll"))
+    let shared_object = std::ffi::CString::new(library_path)
         .map_err(|_| "Failed to convert shared object path to CString")?;
 
     let folder_name = working_dir
@@ -32,7 +30,7 @@ pub fn launch(
 
     // Set env vars needed for the child processes
     std::env::set_var("MODLOADER_ASAR_PATH", asar_path);
-    std::env::set_var("MODLOADER_DLL_PATH", shared_object_path);
+    std::env::set_var("MODLOADER_DLL_PATH", library_path);
     std::env::set_var("MODLOADER_FOLDER_NAME", folder_name);
 
     let _ = std::env::set_current_dir(working_dir);
@@ -89,63 +87,4 @@ pub fn launch(
     }
 
     Ok(std::process::ExitStatus::default())
-}
-
-fn get_latest_executable(dir: &std::path::Path) -> Result<std::path::PathBuf, String> {
-    let dir_name = dir
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or("Failed to get directory name as string")?;
-
-    let target_exe_name = format!("{}.exe", dir_name);
-
-    let files = std::fs::read_dir(dir)
-        .map_err(|_| "Failed to read directory")?
-        .flatten()
-        .collect::<Vec<_>>();
-
-    if !files.iter().any(|f| f.file_name() == "Update.exe") {
-        return Err("The provided directory does not contain Update.exe.".into());
-    }
-
-    let mut app_dirs: Vec<_> = files
-        .iter()
-        .filter_map(|f| f.file_name().to_str().map(|s| s.to_string()))
-        .filter(|f| f.starts_with("app-"))
-        .collect();
-
-    app_dirs.sort_by(|a, b| {
-        let parse_version = |s: &str| -> Result<Vec<u32>, ()> {
-            // Split into prefix and version parts
-            let version_str = s.split_once('-').map(|x| x.1).ok_or(())?;
-            // Parse each numeric component
-            version_str
-                .split('.')
-                .map(|num| num.parse().map_err(|_| ()))
-                .collect()
-        };
-
-        match (parse_version(a), parse_version(b)) {
-            (Ok(a_ver), Ok(b_ver)) => b_ver.cmp(&a_ver), // Both valid: compare versions
-            (Ok(_), Err(_)) => std::cmp::Ordering::Less, // Valid < Invalid
-            (Err(_), Ok(_)) => std::cmp::Ordering::Greater, // Invalid > Valid
-            (Err(_), Err(_)) => std::cmp::Ordering::Equal, // Invalid entries stay at the end
-        }
-    });
-
-    for app in app_dirs {
-        let app_dir = dir.join(app);
-
-        let Ok(app_files) = std::fs::read_dir(&app_dir) else {
-            continue;
-        };
-
-        let app_files = app_files.flatten().collect::<Vec<_>>();
-
-        if app_files.iter().any(|f| *f.file_name() == *target_exe_name) {
-            return Ok(app_dir.join(target_exe_name));
-        }
-    }
-
-    Err("Failed to find a valid Discord executable".into())
 }
