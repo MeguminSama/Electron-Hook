@@ -1,8 +1,4 @@
-use std::{
-    ffi::CString,
-    str::FromStr,
-    sync::{LazyLock, Mutex},
-};
+use std::{ffi::CString, mem::transmute, str::FromStr};
 
 use detours_sys::{
     DetourAttach, DetourCreateProcessWithDllW, DetourIsHelperProcess, DetourRestoreAfterWith,
@@ -12,36 +8,60 @@ use widestring::U16CString;
 use winapi::{
     shared::minwindef::{BOOL, DWORD, HINSTANCE, LPVOID},
     um::{
-        fileapi::{CreateFileW, GetFileAttributesW},
         minwinbase::LPSECURITY_ATTRIBUTES,
         processthreadsapi::{
-            CreateProcessW, GetCurrentThread, ResumeThread, LPPROCESS_INFORMATION, LPSTARTUPINFOW,
+            GetCurrentThread, ResumeThread, LPPROCESS_INFORMATION, LPSTARTUPINFOW,
         },
-        winbase::MoveFileExW,
-        winnt::{DLL_PROCESS_ATTACH, HANDLE, LPCWSTR, LPWSTR, PVOID},
+        winnt::{DLL_PROCESS_ATTACH, HANDLE, LPCWSTR, LPWSTR},
         winuser::MessageBoxA,
     },
 };
 
-static MODLOADER_ASAR_PATH: LazyLock<String> =
-    LazyLock::new(|| std::env::var("MODLOADER_ASAR_PATH").unwrap());
+// Environment variables
+mod env {
+    use std::sync::LazyLock;
 
-static MODLOADER_DLL_PATH: LazyLock<String> =
-    LazyLock::new(|| std::env::var("MODLOADER_DLL_PATH").unwrap());
+    macro_rules! lazy_env {
+        ($name:expr) => {
+            LazyLock::new(|| std::env::var($name).unwrap())
+        };
+    }
 
-static MODLOADER_FOLDER_NAME: LazyLock<String> =
-    LazyLock::new(|| std::env::var("MODLOADER_FOLDER_NAME").unwrap());
+    pub static ASAR_PATH: LazyLock<String> = lazy_env!("MODLOADER_ASAR_PATH");
+    pub static DLL_PATH: LazyLock<String> = lazy_env!("MODLOADER_DLL_PATH");
+    pub static FOLDER_NAME: LazyLock<String> = lazy_env!("MODLOADER_FOLDER_NAME");
+    pub static EXE_PATH: LazyLock<String> = lazy_env!("MODLOADER_EXE_PATH");
+}
+
+// Import the original functions to be hooked
+#[allow(non_upper_case_globals)]
+mod original {
+    use winapi::um::{
+        fileapi::{CreateFileW as CreateFileW_, GetFileAttributesW as GetFileAttributesW_},
+        processthreadsapi::CreateProcessW as CreateProcessW_,
+        winbase::MoveFileExW as MoveFileExW_,
+    };
+
+    #[link(name = "user32")]
+    unsafe extern "C" {
+        #[link_name = "SetCurrentProcessExplicitAppUserModelID"]
+        unsafe fn SetAUMID_(app_id: *const u16);
+    }
+
+    type FnPtr = *mut std::ffi::c_void;
+
+    pub static mut GetFileAttributesW: FnPtr = GetFileAttributesW_ as _;
+    pub static mut CreateFileW: FnPtr = CreateFileW_ as _;
+    pub static mut CreateProcessW: FnPtr = CreateProcessW_ as _;
+    pub static mut MoveFileExW: FnPtr = MoveFileExW_ as _;
+    pub static mut SetAUMID: FnPtr = SetAUMID_ as _;
+}
 
 // We need to make sure that our hooks only affect the current version of Discord.
 // Otherwise, the updater might not work!
 fn prefix_file(file_name: &str) -> String {
-    format!("{}\\{}", *MODLOADER_FOLDER_NAME, file_name)
+    format!("{}\\{}", env::FOLDER_NAME.as_str(), file_name)
 }
-
-static mut ORIGINAL_GET_FILE_ATTRIBUTES_W: PVOID = GetFileAttributesW as _;
-static mut ORIGINAL_CREATE_FILE_W: PVOID = CreateFileW as _;
-static mut ORIGINAL_CREATE_PROCESS_W: PVOID = CreateProcessW as _;
-static mut ORIGINAL_MOVE_FILE_EX_W: PVOID = MoveFileExW as _;
 
 macro_rules! error_hooking_msg {
     ($msg:expr) => {
@@ -73,54 +93,38 @@ pub unsafe extern "stdcall" fn DllMain(
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread() as _);
 
-    let result = DetourAttach(
-        &raw mut ORIGINAL_GET_FILE_ATTRIBUTES_W as _,
-        get_file_attributes_w as _,
-    );
+    macro_rules! attach {
+        ($orig:ident, $target:ident) => {
+            let result = DetourAttach(&raw mut original::$orig, $target as _);
 
-    if result != 0 {
-        error_hooking_msg!("Failed to hook GetFileAttributesW. Please report this issue.");
-        DetourTransactionAbort();
-        return 1;
+            if result != 0 {
+                error_hooking_msg!(format!(
+                    "Failed to hook {}. Please report this issue.",
+                    stringify!($orig)
+                ));
+                DetourTransactionAbort();
+                return 1;
+            };
+        };
     }
 
-    let result = DetourAttach(&raw mut ORIGINAL_CREATE_FILE_W as _, create_file_w as _);
-
-    if result != 0 {
-        error_hooking_msg!("Failed to hook CreateFileW. Please report this issue.");
-        DetourTransactionAbort();
-        return 1;
-    }
-
-    let result = DetourAttach(&raw mut ORIGINAL_MOVE_FILE_EX_W as _, move_file_ex_w as _);
-
-    if result != 0 {
-        error_hooking_msg!("Failed to hook MoveFileExW. Please report this issue.");
-        DetourTransactionAbort();
-        return 1;
-    }
-
-    let result = DetourAttach(
-        &raw mut ORIGINAL_CREATE_PROCESS_W as _,
-        create_process_w as _,
-    );
-
-    if result != 0 {
-        error_hooking_msg!("Failed to hook CreateProcessW. Please report this issue on GitHub.");
-        DetourTransactionAbort();
-        return 1;
-    }
+    attach!(GetFileAttributesW, get_file_attributes_w);
+    attach!(CreateFileW, create_file_w);
+    attach!(MoveFileExW, move_file_ex_w);
+    attach!(CreateProcessW, create_process_w);
+    attach!(SetAUMID, set_aumid);
 
     DetourTransactionCommit();
 
     1
 }
 
+type GetFileAttributesW = unsafe extern "C" fn(LPCWSTR) -> DWORD;
+
 unsafe extern "C" fn get_file_attributes_w(lp_file_name: LPCWSTR) -> DWORD {
     let file_name = U16CString::from_ptr_str(lp_file_name).to_string().unwrap();
 
-    let get_file_attributes_w: extern "C" fn(LPCWSTR) -> DWORD =
-        std::mem::transmute(ORIGINAL_GET_FILE_ATTRIBUTES_W);
+    let get_file_attributes_w: GetFileAttributesW = transmute(original::GetFileAttributesW);
 
     if file_name.contains("resources\\_app.asar") {
         let redirect_to = file_name.replace("\\_app.asar", "\\app.asar");
@@ -131,7 +135,7 @@ unsafe extern "C" fn get_file_attributes_w(lp_file_name: LPCWSTR) -> DWORD {
     }
 
     if file_name.contains(&prefix_file("resources\\app.asar")) {
-        let asar_path_cstr = std::ffi::CString::new(MODLOADER_ASAR_PATH.as_str()).unwrap();
+        let asar_path_cstr = std::ffi::CString::new(env::ASAR_PATH.as_str()).unwrap();
         let asar_path = U16CString::from_str(asar_path_cstr.to_str().unwrap()).unwrap();
 
         return get_file_attributes_w(asar_path.as_ptr());
@@ -139,6 +143,16 @@ unsafe extern "C" fn get_file_attributes_w(lp_file_name: LPCWSTR) -> DWORD {
 
     get_file_attributes_w(lp_file_name)
 }
+
+type CreateFileW = unsafe extern "C" fn(
+    LPCWSTR,
+    DWORD,
+    DWORD,
+    LPSECURITY_ATTRIBUTES,
+    DWORD,
+    DWORD,
+    HANDLE,
+) -> HANDLE;
 
 unsafe extern "C" fn create_file_w(
     lp_file_name: LPCWSTR,
@@ -149,17 +163,10 @@ unsafe extern "C" fn create_file_w(
     dw_flags_and_attributes: DWORD,
     h_template_file: HANDLE,
 ) -> HANDLE {
+    let create_file_w: CreateFileW = transmute(original::CreateFileW);
+
     let file_name = U16CString::from_ptr_str(lp_file_name).to_string().unwrap();
 
-    let create_file_w: extern "C" fn(
-        lp_file_name: LPCWSTR,
-        dw_desired_access: DWORD,
-        dw_share_mode: DWORD,
-        lp_security_attributes: LPSECURITY_ATTRIBUTES,
-        dw_creation_disposition: DWORD,
-        dw_flags_and_attributes: DWORD,
-        h_template_file: HANDLE,
-    ) -> HANDLE = std::mem::transmute(ORIGINAL_CREATE_FILE_W);
     if file_name.contains("resources\\_app.asar") {
         let redirect_to = file_name.replace("\\_app.asar", "\\app.asar");
         let redirect_to_c = std::ffi::CString::new(redirect_to.as_str()).unwrap();
@@ -177,7 +184,7 @@ unsafe extern "C" fn create_file_w(
     }
 
     if file_name.contains(&prefix_file("resources\\app.asar")) {
-        let asar_path_cstr = std::ffi::CString::new(MODLOADER_ASAR_PATH.as_str()).unwrap();
+        let asar_path_cstr = std::ffi::CString::new(env::ASAR_PATH.as_str()).unwrap();
         let asar_path = U16CString::from_str(asar_path_cstr.to_str().unwrap()).unwrap();
 
         return create_file_w(
@@ -202,7 +209,7 @@ unsafe extern "C" fn create_file_w(
     )
 }
 
-type FnMoveFileExW = unsafe extern "C" fn(
+type MoveFileExW = unsafe extern "C" fn(
     lp_existing_file_name: LPCWSTR,
     lp_new_file_name: LPCWSTR,
     dw_flags: DWORD,
@@ -214,7 +221,7 @@ unsafe extern "C" fn move_file_ex_w(
     lp_new_file_name: LPCWSTR,
     dw_flags: DWORD,
 ) -> BOOL {
-    let move_file_ex_w: FnMoveFileExW = std::mem::transmute(ORIGINAL_MOVE_FILE_EX_W);
+    let move_file_ex_w: MoveFileExW = transmute(original::MoveFileExW);
 
     let new_file_name = U16CString::from_ptr_str(lp_new_file_name)
         .to_string()
@@ -244,7 +251,7 @@ unsafe extern "C" fn move_file_ex_w(
     move_file_ex_w(lp_existing_file_name, lp_new_file_name, dw_flags)
 }
 
-type FnCreateProcessW = unsafe extern "C" fn(
+type CreateProcessW = unsafe extern "C" fn(
     lp_application_name: LPCWSTR,
     lp_command_line: LPWSTR,
     lp_process_attributes: LPSECURITY_ATTRIBUTES,
@@ -269,7 +276,7 @@ unsafe extern "C" fn create_process_w(
     lp_startup_info: LPSTARTUPINFOW,
     lp_process_information: LPPROCESS_INFORMATION,
 ) -> BOOL {
-    let create_process_w: FnCreateProcessW = std::mem::transmute(ORIGINAL_CREATE_PROCESS_W);
+    let create_process_w: CreateProcessW = transmute(original::CreateProcessW);
 
     let command_line = U16CString::from_ptr_str(lp_command_line)
         .to_string()
@@ -293,7 +300,7 @@ unsafe extern "C" fn create_process_w(
         );
     }
 
-    let dll_path = CString::from_str(&MODLOADER_DLL_PATH).unwrap();
+    let dll_path = CString::from_str(env::DLL_PATH.as_str()).unwrap();
 
     #[allow(
         clippy::missing_transmute_annotations,
@@ -311,7 +318,7 @@ unsafe extern "C" fn create_process_w(
         lp_startup_info as _,
         lp_process_information as _,
         dll_path.as_ptr(),
-        Some(std::mem::transmute(ORIGINAL_CREATE_PROCESS_W)),
+        Some(std::mem::transmute(original::CreateProcessW)),
     );
 
     if success != 1 {
@@ -322,4 +329,15 @@ unsafe extern "C" fn create_process_w(
     ResumeThread((*lp_process_information).hThread as _);
 
     success
+}
+
+type SetAUMID = unsafe extern "stdcall" fn(lp_app_id: LPCWSTR);
+
+unsafe extern "stdcall" fn set_aumid(_lp_app_id: LPCWSTR) {
+    let set_aumid: SetAUMID = std::mem::transmute(original::SetAUMID);
+
+    // We set the AUMID to be the path of the launcher exe, so it looks like the launcher in the taskbar.
+    // I spent way too long working on this.
+    let new_id = U16CString::from_str(env::EXE_PATH.as_str()).unwrap();
+    set_aumid(new_id.as_ptr());
 }
