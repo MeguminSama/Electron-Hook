@@ -4,6 +4,8 @@
 //!
 //! This module requires the `asar` feature to be enabled.
 
+use std::{fs::Permissions, os::unix::fs::PermissionsExt};
+
 fn make_package_json(wm_class: &Option<String>) -> String {
     if let Some(wm_class) = wm_class {
         format!(r#"{{"main": "index.js", "name": "{wm_class}"}}"#)
@@ -189,6 +191,15 @@ impl Asar {
 
         let file = std::fs::File::create(&asar_path)
             .map_err(|e| format!("Failed to create file at {}: {e}", asar_path.display()))?;
+
+        // For some reason MacOS sets the default permissions to execute-only????? no read/write... let's fix that...
+        file.set_permissions(Permissions::from_mode(0o644))
+            .map_err(|e| {
+                format!(
+                    "Failed to set permissions 644 on file {}: {e}",
+                    asar_path.display()
+                )
+            })?;
 
         asar.finalize(file)
             .map_err(|e| format!("Failed to write asar to disk with error: {e}"))?;

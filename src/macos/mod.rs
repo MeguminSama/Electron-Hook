@@ -20,9 +20,13 @@ pub(crate) fn launch(
 
     let mut target = std::process::Command::new(&executable);
 
+    println!("Launching {:?}", executable);
+    println!("Working directory: {:?}", working_dir);
+    println!("Library path: {:?}", library_path);
+
     target
         .current_dir(working_dir)
-        .env("LD_PRELOAD", library_path)
+        .env("DYLD_INSERT_LIBRARIES", library_path)
         .env("MODLOADER_ASAR_PATH", asar_path)
         .args(args);
 

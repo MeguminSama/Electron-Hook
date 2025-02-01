@@ -60,6 +60,9 @@ mod linux;
 #[cfg(target_os = "windows")]
 mod windows;
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 // TODO: For MacOS
 
 /// Launches an Electron executable with the provided information.
@@ -86,5 +89,10 @@ pub fn launch(
     {
         // No need for detach on Windows, as the process already detaches itself.
         windows::launch(executable, library_path, asar_path, args)
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        macos::launch(executable, library_path, asar_path, args, detach)
     }
 }
