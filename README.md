@@ -8,6 +8,7 @@ This project was designed to ease some pain points with modding Discord, but it 
 
 For some real-life uses of electron-hook, check out:
 
+- [moonlight launcher](https://github.com/meguminsama/moonlight-launcher)
 - [Vencord Launcher](https://github.com/meguminsama/vencord-launcher)
 
 # Installation
