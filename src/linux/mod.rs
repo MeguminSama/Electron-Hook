@@ -25,6 +25,9 @@ pub(crate) fn launch(
         .current_dir(working_dir)
         .env("LD_PRELOAD", library_path)
         .env("MODLOADER_ASAR_PATH", asar_path)
+        .env("MODLOADER_EXECUTABLE", std::env::current_exe().unwrap())
+        .env("MODLOADER_LIBRARY_PATH", library_path)
+        .env("MODLOADER_ORIGINAL_ASAR_RELATIVE", "../_app.asar")
         .args(args);
 
     // We also need to detach stdin.

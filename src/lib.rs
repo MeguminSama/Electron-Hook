@@ -27,7 +27,7 @@
 //! let template = r#"
 //!     console.log("Mod injected!!!");
 //!     let asar = require("path").resolve(__dirname, "../_app.asar");
-//!     require("$ENTRYPOINT").inject(asar);
+//!     require(process.env.MODLOADER_MOD_ENTRYPOINT).inject(asar);
 //! "#;
 //!
 //! // Create the asar file

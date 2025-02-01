@@ -25,7 +25,7 @@ fn make_package_json(wm_class: &Option<String>) -> String {
 ///
 /// let asar = Asar::new()
 ///     .with_id("vencord-release")
-///     .with_template("require('$ENTRYPOINT');")
+///     .with_template("require(process.env.MODLOADER_MOD_ENTRYPOINT);")
 ///     .with_mod_entrypoint(entrypoint.to_str().unwrap())
 ///     .with_profile_dir(profile_dir.to_str().unwrap()) // Optional
 ///     .create();
@@ -52,15 +52,24 @@ pub struct Asar {
 
     /// The template for the index.js that will go into the ASAR archive.
     ///
-    /// There are two variables that can be used in the template:
+    /// There are multiple environment variables that can be used in the template:
     ///
-    /// - `$ENTRYPOINT`: The path to the entrypoint of the mod.
-    /// - `$PROFILE`: The profile directory for the mod.
+    /// | Environment Variable               | Description                                     | Notes                    |
+    /// | ---------------------------------- | ----------------------------------------------- | ------------------------ |
+    /// | `MODLOADER_EXECUTABLE`             | Specifies the path to the Modloader executable. |                          |
+    /// | `MODLOADER_MOD_ENTRYPOINT`         | The path to the entrypoint of the mod.          |                          |
+    /// | `MODLOADER_ASAR_ID`                | The name of the ASAR ID selected                |                          |
+    /// | `MODLOADER_ASAR_PATH`              | The path to the ASAR file.                      |                          |
+    /// | `MODLOADER_LIBRARY_PATH`           | The path to the `.dll` or `.so`.                |                          |
+    /// | `MODLOADER_ORIGINAL_ASAR_RELATIVE` | The relative path to the original ASAR file     | Is always `../_app.asar` |
+    /// | `MODLOADER_PROFILE_DIR`            | The path to the custom profile directory        | Optional                 |
+    /// | `MODLOADER_WM_CLASS`               | The WM_CLASS of the Electron application.       | Optional                 |
+    /// | `MODLOADER_FOLDER_NAME`            | the app-<version> folder name                   | Windows only             |
     ///
     /// For a basic implementation, you want to at least require your mod, e.g.:
     ///
     /// ```javascript
-    /// require("$ENTRYPOINT");
+    /// require(process.env.MODLOADER_MOD_ENTRYPOINT);
     /// ```
     pub template: String,
 
@@ -120,6 +129,7 @@ impl Asar {
     #[cfg(feature = "uuid")]
     pub fn with_uuid(mut self) -> Self {
         self.id = uuid::Uuid::new_v4().to_string();
+        std::env::set_var("MODLOADER_ASAR_ID", self.id.clone());
         self
     }
 
@@ -128,6 +138,7 @@ impl Asar {
     /// See [Asar::id]
     pub fn with_id(mut self, id: &str) -> Self {
         self.id = id.to_string();
+        std::env::set_var("MODLOADER_ASAR_ID", id);
         self
     }
 
@@ -144,6 +155,7 @@ impl Asar {
     /// See [Asar::mod_entrypoint]
     pub fn with_mod_entrypoint(mut self, mod_entrypoint: &str) -> Self {
         self.mod_entrypoint = mod_entrypoint.to_string();
+        std::env::set_var("MODLOADER_MOD_ENTRYPOINT", mod_entrypoint);
         self
     }
 
@@ -152,6 +164,7 @@ impl Asar {
     /// See [Asar::wm_class]
     pub fn with_wm_class(mut self, wm_class: &str) -> Self {
         self.wm_class = Some(wm_class.to_string());
+        std::env::set_var("MODLOADER_WM_CLASS", wm_class);
         self
     }
 
@@ -160,6 +173,7 @@ impl Asar {
     /// See [Asar::profile_dir]
     pub fn with_profile_dir(mut self, profile_dir: &str) -> Self {
         self.profile_dir = Some(profile_dir.to_string());
+        std::env::set_var("MODLOADER_PROFILE_DIR", profile_dir);
         self
     }
 
@@ -169,19 +183,11 @@ impl Asar {
     pub fn create(&self) -> Result<std::path::PathBuf, String> {
         use crate::paths::asar_cache_path;
 
-        let mut javascript = self.template.replace("$ENTRYPOINT", &self.mod_entrypoint);
-
-        if let Some(profile) = &self.profile_dir {
-            javascript = javascript.replace("$PROFILE", profile);
-        } else if self.template.contains("$PROFILE") {
-            return Err("Template contains $PROFILE but no profile directory was provided.".into());
-        }
-
         let asar_path = asar_cache_path(&self.id);
 
         let mut asar = asar::AsarWriter::new();
 
-        asar.write_file("index.js", javascript, false)
+        asar.write_file("index.js", self.template.clone(), false)
             .map_err(|e| format!("Failed to write index.js: {e}"))?;
 
         asar.write_file("package.json", make_package_json(&self.wm_class), false)

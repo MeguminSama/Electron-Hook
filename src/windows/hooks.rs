@@ -28,9 +28,9 @@ mod env {
     }
 
     pub static ASAR_PATH: LazyLock<String> = lazy_env!("MODLOADER_ASAR_PATH");
-    pub static DLL_PATH: LazyLock<String> = lazy_env!("MODLOADER_DLL_PATH");
+    pub static EXE_PATH: LazyLock<String> = lazy_env!("MODLOADER_EXECUTABLE");
+    pub static DLL_PATH: LazyLock<String> = lazy_env!("MODLOADER_LIBRARY_PATH");
     pub static FOLDER_NAME: LazyLock<String> = lazy_env!("MODLOADER_FOLDER_NAME");
-    pub static EXE_PATH: LazyLock<String> = lazy_env!("MODLOADER_EXE_PATH");
 }
 
 // Import the original functions to be hooked

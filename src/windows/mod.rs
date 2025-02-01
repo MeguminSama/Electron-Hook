@@ -31,9 +31,10 @@ pub fn launch(
 
         // Set env vars needed for the child processes
         std::env::set_var("MODLOADER_ASAR_PATH", asar_path);
-        std::env::set_var("MODLOADER_EXE_PATH", std::env::current_exe().unwrap());
-        std::env::set_var("MODLOADER_DLL_PATH", library_path);
+        std::env::set_var("MODLOADER_EXECUTABLE", std::env::current_exe().unwrap());
+        std::env::set_var("MODLOADER_LIBRARY_PATH", library_path);
         std::env::set_var("MODLOADER_FOLDER_NAME", folder_name);
+        std::env::set_var("MODLOADER_ORIGINAL_ASAR_RELATIVE", "../_app.asar");
 
         let working_dir = std::ffi::CString::new(working_dir.parent().unwrap().to_str().unwrap())
             .map_err(|_| "Failed to convert directory path to CString")?;
