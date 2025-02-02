@@ -37,6 +37,12 @@ pub(crate) fn launch_flatpak(
 
     let current_executable = std::env::current_exe().unwrap().display().to_string();
 
+    let current_executable = if current_executable.starts_with("/usr") {
+        format!("/run/host{}", current_executable)
+    } else {
+        current_executable
+    };
+
     let mut target = std::process::Command::new("flatpak");
 
     target
