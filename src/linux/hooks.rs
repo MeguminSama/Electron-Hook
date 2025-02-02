@@ -1,7 +1,4 @@
-use std::{
-    ffi::{c_char, c_void},
-    sync::LazyLock,
-};
+use std::ffi::{c_char, c_void};
 
 use retour::static_detour;
 
@@ -32,18 +29,6 @@ unsafe extern "C" {
         buf: *mut c_void,
     ) -> i32;
 }
-
-type MainFn = unsafe extern "C" fn(i32, *const *const char) -> i32;
-
-type LibcStartMainFn = unsafe extern "C" fn(
-    MainFn,
-    i32,
-    *const *const char,
-    MainFn,
-    extern "C" fn(),
-    extern "C" fn(),
-    *mut c_void,
-) -> i32;
 
 #[ctor::ctor]
 unsafe fn init_dynamic_hooks() {

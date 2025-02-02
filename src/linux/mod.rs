@@ -7,17 +7,21 @@ pub(crate) fn launch_flatpak(
     args: Vec<String>,
     detach: bool,
 ) -> Result<Option<u32>, String> {
-    let (library_path, library_dir) = if library_path.contains("/") {
-        let library_dir = std::path::PathBuf::from(library_path);
-        let library_dir = library_dir
-            .parent()
-            .ok_or("Failed to get parent directory from library path")?
-            .to_string_lossy()
-            .to_string();
-
-        (library_path.to_string(), library_dir)
+    // If the library path is absolute, prefix with /run/host
+    let library_path = if library_path.starts_with("/") {
+        format!("/run/host{}", library_path)
     } else {
-        (format!("/usr/lib/{}", library_path), "/usr/lib".to_string())
+        // If the file is in the executable's directory, prefix with /run/host/{current_dir}
+        let current_dir = std::env::current_dir().unwrap();
+        let current_dir = current_dir.to_string_lossy();
+
+        let local_path = std::path::PathBuf::from(format!("{}/{}", current_dir, library_path));
+        if local_path.is_file() {
+            format!("{}/{}", current_dir, library_path)
+        } else {
+            // If it's not in the current directory, and not an absolute path, assume it's in /usr/lib...
+            format!("/run/host/usr/lib/{}", library_path)
+        }
     };
 
     let asar_dir = std::path::PathBuf::from(asar_path);
@@ -51,13 +55,10 @@ pub(crate) fn launch_flatpak(
         .arg(format!("--filesystem={}:ro", asar_dir)) // Read-only access to the ASAR dir
         .arg(format!("--filesystem={}:create", mod_entrypoint_dir)) // let the mod update itself...
         .arg(format!("--filesystem={}:ro", current_executable))
-        .arg(format!("--env=ZYPAK_LD_PRELOAD=/run/host{}", library_path)) // give zypak our LD_PRELOAD
+        .arg(format!("--env=ZYPAK_LD_PRELOAD={}", library_path)) // give zypak our LD_PRELOAD
         .arg(format!("--env=MODLOADER_ASAR_PATH={}", asar_path))
         .arg(format!("--env=MODLOADER_EXECUTABLE={}", current_executable))
-        .arg(format!(
-            "--env=MODLOADER_LIBRARY_PATH=/run/host{}",
-            library_path
-        ))
+        .arg(format!("--env=MODLOADER_LIBRARY_PATH={}", library_path))
         .arg(format!(
             "--env=MODLOADER_ORIGINAL_ASAR_RELATIVE=../_app.asar"
         ))
