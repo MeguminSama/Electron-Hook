@@ -64,11 +64,17 @@ mod windows;
 
 /// Launches an Electron executable with the provided information.
 ///
-/// On Windows, the `executable_or_directory` parameter is the path to the directory containing `Update.exe`.
+/// `id` on Linux: the path to the executable.
 ///
-/// On Linux, the `executable_or_directory` parameter is the path to the executable.
+/// `id` on Windows: the path to the directory containing `Update.exe`.
 ///
-/// It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
+/// `library_path`: The path to the electron-hook `.so` or `.dll`
+///
+/// `asar_path`: The path to the ASAR file to inject
+///
+/// `args`: Arguments to pass to the executable
+///
+/// `detach`: It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
 #[allow(unused_variables)]
 pub fn launch(
     executable: &str,
@@ -87,4 +93,30 @@ pub fn launch(
         // No need for detach on Windows, as the process already detaches itself.
         windows::launch(executable, library_path, asar_path, args)
     }
+}
+
+/// Launches an Electron executable through Flatpak with the provided information.
+///
+/// This is only available on Linux.
+///
+/// TODO: This only supports global packages. Are --user flatpak packages handled differently?
+///
+/// `id`: The ID of the flatpak package.
+///
+/// `library_path`: The path to the electron-hook `.so` or `.dll`
+///
+/// `asar_path`: The path to the ASAR file to inject
+///
+/// `args`: Arguments to pass to the executable
+///
+/// `detach`: It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
+#[cfg(any(doc, target_os = "linux"))]
+pub fn launch_flatpak(
+    id: &str,
+    library_path: &str,
+    asar_path: &str,
+    args: Vec<String>,
+    detach: bool,
+) -> Result<Option<u32>, String> {
+    linux::launch_flatpak(id, library_path, asar_path, args, detach)
 }

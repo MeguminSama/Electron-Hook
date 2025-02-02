@@ -5,9 +5,18 @@ use std::{
 
 use retour::static_detour;
 
-static MODLOADER_ASAR_PATH: LazyLock<String> = LazyLock::new(|| {
-    std::env::var("MODLOADER_ASAR_PATH").expect("MODLOADER_ASAR_PATH not in environment!")
-});
+mod env {
+    use std::sync::LazyLock;
+
+    macro_rules! lazy_env {
+        ($name:expr) => {
+            LazyLock::new(|| std::env::var($name).unwrap())
+        };
+    }
+
+    pub static MODLOADER_ASAR_PATH: LazyLock<String> = lazy_env!("MODLOADER_ASAR_PATH");
+    pub static MODLOADER_LIBRARY_PATH: LazyLock<String> = lazy_env!("MODLOADER_LIBRARY_PATH");
+}
 
 #[link(name = "dl")]
 unsafe extern "C" {
@@ -24,9 +33,9 @@ unsafe extern "C" {
     ) -> i32;
 }
 
-type MainFn = extern "C" fn(i32, *const *const c_void, *const *const c_void) -> i32;
+type MainFn = unsafe extern "C" fn(i32, *const *const char) -> i32;
 
-type LibcStartMainFn = fn(
+type LibcStartMainFn = unsafe extern "C" fn(
     MainFn,
     i32,
     *const *const char,
@@ -36,16 +45,8 @@ type LibcStartMainFn = fn(
     *mut c_void,
 ) -> i32;
 
-#[no_mangle]
-unsafe extern "C" fn __libc_start_main(
-    main: MainFn,
-    argc: i32,
-    argv: *const *const char,
-    init: MainFn,
-    fini: extern "C" fn(),
-    rtld_fini: extern "C" fn(),
-    stack_end: *mut c_void,
-) -> i32 {
+#[ctor::ctor]
+unsafe fn init_dynamic_hooks() {
     #[allow(clippy::missing_transmute_annotations)]
     UvFsLstatDetour
         .initialize(
@@ -55,15 +56,6 @@ unsafe extern "C" fn __libc_start_main(
         .unwrap();
 
     UvFsLstatDetour.enable().unwrap();
-
-    let orig_libc_start_main_addr: *const c_void = dlsym(
-        libc::RTLD_NEXT,
-        c"__libc_start_main".as_ptr() as *const c_char,
-    );
-
-    let orig_libc_start_main: LibcStartMainFn = std::mem::transmute(orig_libc_start_main_addr);
-
-    orig_libc_start_main(main, argc, argv, init, fini, rtld_fini, stack_end)
 }
 
 type UvFsLstat = unsafe extern "C" fn(
@@ -77,6 +69,24 @@ static_detour! {
     static UvFsLstatDetour: fn(*const c_void, *const c_void, *const c_char, *mut c_void) -> i32;
 }
 
+// This is a fix needed for flatpak support, as zypak is stripping our LD_PRELOAD incorrectly
+// See: https://github.com/refi64/zypak/issues/42
+#[no_mangle]
+unsafe extern "C" fn unsetenv(name: *const c_char) -> i32 {
+    let name_str = std::ffi::CStr::from_ptr(name).to_str().unwrap();
+
+    let original_unsetenv: unsafe extern "C" fn(*const c_char) -> i32 =
+        std::mem::transmute(dlsym(libc::RTLD_NEXT, c"unsetenv".as_ptr()));
+
+    if name_str == "LD_PRELOAD" {
+        std::env::set_var("LD_PRELOAD", &*env::MODLOADER_LIBRARY_PATH);
+        return 0;
+    }
+
+    original_unsetenv(name)
+}
+
+// make the linker happy... TODO: Can we compile without this?
 #[export_name = "uv_fs_lstat"]
 unsafe extern "C" fn export_uv_vs_lstat(
     loop_: *const c_void,
@@ -124,7 +134,7 @@ unsafe extern "C" fn __xstat64(ver: i32, path: *const c_char, out: *mut libc::st
 
     // If calling app.asar, return the custom app.asar
     if path_str.contains("resources/app.asar") {
-        let asar_path_cstr = std::ffi::CString::new(MODLOADER_ASAR_PATH.as_str()).unwrap();
+        let asar_path_cstr = std::ffi::CString::new(env::MODLOADER_ASAR_PATH.as_str()).unwrap();
         return ORIGINAL_XSTAT64(ver, asar_path_cstr.as_ptr(), out);
     }
 
@@ -153,7 +163,7 @@ unsafe extern "C" fn open64(path: *const c_char, flags: i32, mode: i32) -> i32 {
 
     // If calling app.asar, return the custom app.asar
     if path_str.contains("resources/app.asar") {
-        let redirect_to = std::ffi::CString::new(MODLOADER_ASAR_PATH.as_str()).unwrap();
+        let redirect_to = std::ffi::CString::new(env::MODLOADER_ASAR_PATH.as_str()).unwrap();
 
         return ORIGINAL_OPENAT64(redirect_to.as_ptr(), flags, mode);
     }
