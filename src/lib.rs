@@ -112,7 +112,7 @@ pub fn launch(
 /// `detach`: It is recommended to set `detach` to true to prevent the process from dying when the parent process is closed.
 #[cfg(any(doc, target_os = "linux"))]
 pub fn launch_flatpak(
-    id: &str,
+    id: &FlatpakID,
     library_path: &str,
     asar_path: &str,
     args: Vec<String>,
@@ -120,3 +120,5 @@ pub fn launch_flatpak(
 ) -> Result<Option<u32>, String> {
     linux::launch_flatpak(id, library_path, asar_path, args, detach)
 }
+
+pub use linux::FlatpakID;

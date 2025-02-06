@@ -1,25 +1,41 @@
 mod hooks;
 
+pub enum FlatpakID {
+    User(String),
+    System(String),
+}
+
+impl std::fmt::Display for FlatpakID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FlatpakID::User(id) => write!(f, "{}", id),
+            FlatpakID::System(id) => write!(f, "{}", id),
+        }
+    }
+}
+
 pub(crate) fn launch_flatpak(
-    id: &str,
+    id: &FlatpakID,
     library_path: &str,
     asar_path: &str,
     args: Vec<String>,
     detach: bool,
 ) -> Result<Option<u32>, String> {
-    // If the library path is absolute, prefix with /run/host
-    let library_path = if library_path.starts_with("/") {
+    // If the library starts with /home, return the whole path.
+    // If the library is absolute, prefix wtih /run/host
+    // If it's a local file, provide the whole path
+    // Otherwise, assume it's in /usr/lib, so prefix with /run/host/usr/lib
+    let library_path = if library_path.starts_with("/home") {
+        library_path.to_string()
+    } else if library_path.starts_with('/') {
         format!("/run/host{}", library_path)
     } else {
-        // If the file is in the executable's directory, prefix with /run/host/{current_dir}
         let current_dir = std::env::current_dir().unwrap();
-        let current_dir = current_dir.to_string_lossy();
+        let local_path = current_dir.join(&library_path);
 
-        let local_path = std::path::PathBuf::from(format!("{}/{}", current_dir, library_path));
         if local_path.is_file() {
-            format!("{}/{}", current_dir, library_path)
+            local_path.to_string_lossy().into_owned()
         } else {
-            // If it's not in the current directory, and not an absolute path, assume it's in /usr/lib...
             format!("/run/host/usr/lib/{}", library_path)
         }
     };
@@ -49,8 +65,14 @@ pub(crate) fn launch_flatpak(
 
     let mut target = std::process::Command::new("flatpak");
 
+    target.arg("run");
+
+    match id {
+        FlatpakID::User(_) => target.arg("--user"),
+        FlatpakID::System(_) => target.arg("--system"),
+    };
+
     target
-        .arg("run")
         .arg("--filesystem=host:ro") // allows us to read /usr/lib as /run/host/usr/lib
         .arg(format!("--filesystem={}:ro", asar_dir)) // Read-only access to the ASAR dir
         .arg(format!("--filesystem={}:create", mod_entrypoint_dir)) // let the mod update itself...
@@ -62,7 +84,7 @@ pub(crate) fn launch_flatpak(
         .arg(format!(
             "--env=MODLOADER_ORIGINAL_ASAR_RELATIVE=../_app.asar"
         ))
-        .arg(id)
+        .arg(id.to_string())
         .args(args);
 
     // We also need to detach stdin.
