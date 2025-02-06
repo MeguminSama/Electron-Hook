@@ -120,5 +120,5 @@ pub fn launch_flatpak(
 ) -> Result<Option<u32>, String> {
     linux::launch_flatpak(id, library_path, asar_path, args, detach)
 }
-
+#[cfg(any(doc, target_os = "linux"))]
 pub use linux::FlatpakID;
