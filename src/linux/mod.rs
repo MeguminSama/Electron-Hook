@@ -1,18 +1,6 @@
 mod hooks;
 
-pub enum FlatpakID {
-    User(String),
-    System(String),
-}
-
-impl std::fmt::Display for FlatpakID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FlatpakID::User(id) => write!(f, "{}", id),
-            FlatpakID::System(id) => write!(f, "{}", id),
-        }
-    }
-}
+use super::FlatpakID;
 
 pub(crate) fn launch_flatpak(
     id: &FlatpakID,

@@ -120,5 +120,20 @@ pub fn launch_flatpak(
 ) -> Result<Option<u32>, String> {
     linux::launch_flatpak(id, library_path, asar_path, args, detach)
 }
-#[cfg(any(doc, target_os = "linux"))]
-pub use linux::FlatpakID;
+
+/// The ID of a Flatpak package.
+pub enum FlatpakID {
+    /// A User install of a flatpak package. Will be run with `--user`
+    User(String),
+    /// A System install of a flatpak package. Will be run with `--system`
+    System(String),
+}
+
+impl std::fmt::Display for FlatpakID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FlatpakID::User(id) => write!(f, "{}", id),
+            FlatpakID::System(id) => write!(f, "{}", id),
+        }
+    }
+}
