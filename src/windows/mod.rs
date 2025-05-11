@@ -8,11 +8,6 @@ use winapi::um::{
     winuser::{MessageBoxA, MB_ICONERROR},
 };
 
-#[link(name = "kernel32")]
-extern "stdcall" {
-    fn AllocConsole() -> i32;
-}
-
 pub fn launch(
     executable: &str,
     library_path: &str,
