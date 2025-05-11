@@ -1,4 +1,8 @@
-use std::{ffi::CString, mem::transmute, str::FromStr};
+use std::{
+    ffi::{c_char, c_void, CStr, CString},
+    mem::transmute,
+    str::FromStr,
+};
 
 use detours_sys::{
     DetourAttach, DetourCreateProcessWithDllW, DetourIsHelperProcess, DetourRestoreAfterWith,
@@ -8,6 +12,7 @@ use widestring::U16CString;
 use winapi::{
     shared::minwindef::{BOOL, DWORD, HINSTANCE, LPVOID},
     um::{
+        libloaderapi::{GetModuleHandleA, GetProcAddress},
         minwinbase::LPSECURITY_ATTRIBUTES,
         processthreadsapi::{
             GetCurrentThread, ResumeThread, LPPROCESS_INFORMATION, LPSTARTUPINFOW,
@@ -16,6 +21,12 @@ use winapi::{
         winuser::MessageBoxA,
     },
 };
+
+#[cfg(debug_assertions)]
+#[link(name = "kernel32")]
+unsafe extern "stdcall" {
+    unsafe fn AllocConsole() -> BOOL;
+}
 
 // Environment variables
 mod env {
@@ -55,6 +66,7 @@ mod original {
     pub static mut CreateProcessW: FnPtr = CreateProcessW_ as _;
     pub static mut MoveFileExW: FnPtr = MoveFileExW_ as _;
     pub static mut SetAUMID: FnPtr = SetAUMID_ as _;
+    pub static mut uv_fs_lstat: FnPtr = std::ptr::null_mut();
 }
 
 // We need to make sure that our hooks only affect the current version of Discord.
@@ -93,6 +105,9 @@ pub unsafe extern "stdcall" fn DllMain(
     DetourTransactionBegin();
     DetourUpdateThread(GetCurrentThread() as _);
 
+    #[cfg(debug_assertions)]
+    AllocConsole();
+
     macro_rules! attach {
         ($orig:ident, $target:ident) => {
             let result = DetourAttach(&raw mut original::$orig, $target as _);
@@ -114,9 +129,59 @@ pub unsafe extern "stdcall" fn DllMain(
     attach!(CreateProcessW, create_process_w);
     attach!(SetAUMID, set_aumid);
 
+    fn get_executable_name() -> Option<CString> {
+        let current_exe = std::env::current_exe().ok()?;
+        let file_name = current_exe.file_name()?;
+        let file_name = file_name.to_str()?;
+        let file_name_cstr = CString::new(file_name).ok()?;
+        Some(file_name_cstr)
+    }
+
+    if let Some(current_exe) = get_executable_name() {
+        let process_handle = GetModuleHandleA(current_exe.as_ptr());
+        if !process_handle.is_null() {
+            let uv_fs_lstat_ptr = GetProcAddress(process_handle as _, c"uv_fs_lstat".as_ptr());
+            if !uv_fs_lstat_ptr.is_null() {
+                original::uv_fs_lstat = uv_fs_lstat_ptr as _;
+                attach!(uv_fs_lstat, uv_fs_lstat);
+            }
+        }
+    }
+
     DetourTransactionCommit();
 
     1
+}
+
+type UvFsLstat = unsafe extern "C" fn(
+    _loop: *const c_void,
+    req: *const c_void,
+    path: *const c_char,
+    cb: *const c_void,
+) -> i32;
+unsafe extern "C" fn uv_fs_lstat(
+    _loop: *const c_void,
+    _req: *const c_void,
+    path: *const c_char,
+    _cb: *const c_void,
+) -> i32 {
+    let uv_fs_lstat: UvFsLstat = transmute(original::uv_fs_lstat);
+
+    let file_name = CStr::from_ptr(path as _);
+    let file_name = file_name.to_str().unwrap();
+
+    if file_name.contains("resources\\_app.asar") {
+        let redirect_to = file_name.replace("\\_app.asar", "\\app.asar");
+        let redirect_to_c = std::ffi::CString::new(redirect_to.as_str()).unwrap();
+
+        return uv_fs_lstat(_loop, _req, redirect_to_c.as_ptr() as _, _cb);
+    }
+    if file_name.contains(&prefix_file("resources\\app.asar")) {
+        let asar_path_cstr = std::ffi::CString::new(env::ASAR_PATH.as_str()).unwrap();
+
+        return uv_fs_lstat(_loop, _req, asar_path_cstr.as_ptr() as _, _cb);
+    }
+    uv_fs_lstat(_loop, _req, path, _cb)
 }
 
 type GetFileAttributesW = unsafe extern "C" fn(LPCWSTR) -> DWORD;

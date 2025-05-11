@@ -47,7 +47,7 @@ pub fn launch(
             .map_err(|_| "Failed to convert executable path to CString")?;
 
         let args = args.join(" ");
-        let command_line = format!("\"{}\" {}", executable_path, args);
+        let command_line = format!("\"{executable_path}\" {args}");
         let command_line = std::ffi::CString::new(command_line)
             .map_err(|_| "Failed to convert command line to CString")?;
 

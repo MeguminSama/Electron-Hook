@@ -132,8 +132,8 @@ pub enum FlatpakID {
 impl std::fmt::Display for FlatpakID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FlatpakID::User(id) => write!(f, "{}", id),
-            FlatpakID::System(id) => write!(f, "{}", id),
+            FlatpakID::User(id) => write!(f, "{id}"),
+            FlatpakID::System(id) => write!(f, "{id}"),
         }
     }
 }
