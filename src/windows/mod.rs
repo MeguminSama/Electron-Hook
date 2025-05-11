@@ -8,6 +8,11 @@ use winapi::um::{
     winuser::{MessageBoxA, MB_ICONERROR},
 };
 
+#[link(name = "kernel32")]
+extern "stdcall" {
+    fn AllocConsole() -> i32;
+}
+
 pub fn launch(
     executable: &str,
     library_path: &str,
@@ -15,6 +20,10 @@ pub fn launch(
     args: Vec<String>,
 ) -> Result<Option<u32>, String> {
     unsafe {
+        let process_args = std::env::args().skip(1).collect::<Vec<String>>();
+        let process_args_json =
+            serde_json::to_string(&process_args).unwrap_or_else(|_| "[]".into());
+
         let executable = std::path::Path::new(executable);
 
         let working_dir = executable
@@ -35,6 +44,7 @@ pub fn launch(
         std::env::set_var("MODLOADER_LIBRARY_PATH", library_path);
         std::env::set_var("MODLOADER_FOLDER_NAME", folder_name);
         std::env::set_var("MODLOADER_ORIGINAL_ASAR_RELATIVE", "../_app.asar");
+        std::env::set_var("MODLOADER_PROCESS_ARGV", process_args_json);
 
         let working_dir = std::ffi::CString::new(working_dir.parent().unwrap().to_str().unwrap())
             .map_err(|_| "Failed to convert directory path to CString")?;

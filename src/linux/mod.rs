@@ -121,6 +121,9 @@ pub(crate) fn launch(
 
     let mut target = std::process::Command::new(&executable);
 
+    let process_args = std::env::args().skip(1).collect::<Vec<String>>();
+    let process_args_json = serde_json::to_string(&process_args).unwrap_or_else(|_| "[]".into());
+
     target
         .current_dir(working_dir)
         .env("LD_PRELOAD", library_path)
@@ -128,6 +131,7 @@ pub(crate) fn launch(
         .env("MODLOADER_EXECUTABLE", std::env::current_exe().unwrap())
         .env("MODLOADER_LIBRARY_PATH", library_path)
         .env("MODLOADER_ORIGINAL_ASAR_RELATIVE", "../_app.asar")
+        .env("MODLOADER_PROCESS_ARGV", process_args_json)
         .args(args);
 
     // We also need to detach stdin.
