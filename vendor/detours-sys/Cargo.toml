@@ -1,5 +1,10 @@
 [package]
-name = "detours-sys"
+name = "electron-hook-detours-sys"
+version = "0.1.0"
+edition = "2021"
+description = "microsoft detours bindings"
+homepage = "https://github.com/meguminsama/electron-hook"
+repository = "https://github.com/meguminsama/electron-hook"
 license = "MIT"
 
 [build-dependencies]
