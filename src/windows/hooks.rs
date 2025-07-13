@@ -24,7 +24,7 @@ use winapi::{
 
 #[cfg(debug_assertions)]
 #[link(name = "kernel32")]
-unsafe extern "stdcall" {
+unsafe extern "system" {
     unsafe fn AllocConsole() -> BOOL;
 }
 
@@ -87,7 +87,7 @@ macro_rules! error_hooking_msg {
 }
 
 #[no_mangle]
-pub unsafe extern "stdcall" fn DllMain(
+pub unsafe extern "system" fn DllMain(
     _hinst_dll: HINSTANCE,
     fwd_reason: DWORD,
     _lpv_reserved: LPVOID,
@@ -396,9 +396,9 @@ unsafe extern "C" fn create_process_w(
     success
 }
 
-type SetAUMID = unsafe extern "stdcall" fn(lp_app_id: LPCWSTR);
+type SetAUMID = unsafe extern "system" fn(lp_app_id: LPCWSTR);
 
-unsafe extern "stdcall" fn set_aumid(_lp_app_id: LPCWSTR) {
+unsafe extern "system" fn set_aumid(_lp_app_id: LPCWSTR) {
     let set_aumid: SetAUMID = std::mem::transmute(original::SetAUMID);
 
     // We set the AUMID to be the path of the launcher exe, so it looks like the launcher in the taskbar.

@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "vendor/detours-sys"]
+
 [package]
 name = "electron-hook"
 description = "In-memory Electron mod loader."
@@ -11,7 +14,7 @@ keywords = ["modding", "electron", "discord", "hook", "detour"]
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib"] 
 
 [features]
 default = ["uuid", "asar"]
@@ -34,7 +37,7 @@ optional = true
 [target.'cfg(windows)'.dependencies]
 widestring = "1.2.0"
 winapi = { version = "0.3.9", features = ["handleapi", "winuser"] }
-detours-sys = { version = "0.1.2" }
+detours-sys = { path = "vendor/detours-sys" }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.167"

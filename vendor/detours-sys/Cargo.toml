@@ -1,0 +1,8 @@
+[package]
+name = "detours-sys"
+license = "MIT"
+
+[build-dependencies]
+bindgen = "0.71"
+cc = "1.2"
+cmake = "0.1"
